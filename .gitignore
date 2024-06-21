@@ -1,10 +1,26 @@
-css/fetch.css
-fetch.html
-js/classes.js
-js/fetch.js
-js/script_bkup.js
-js/chord-notes.json.txt
-js/intervals.json.txt
-A2-hosting.txt
-notes.txt
-.htaccess
+# Dependencies
+node_modules
+
+# Production and other folders
+/build
+/dist
+
+### VisualStudioCode ###
+.vscode/*
+
+# Windows thumbnail cache files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Numerous always-ignore extensions
+*.diff
+*.env
+*.err
+*.log
+*.sass-cache
+*.tmp
+
+# image files
+images

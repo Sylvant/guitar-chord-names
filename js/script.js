@@ -1,162 +1,249 @@
-// User entered fret numbers by string
-const firstNote = document.getElementById('note1');
-const secondNote = document.getElementById('note2') ;
-const thirdNote = document.getElementById('note3');
-const fourthNote = document.getElementById('note4');
-const fifthNote = document.getElementById('note5');
-const sixthNote = document.getElementById('note6');
+import setTuning from "./modules/setTuning.js";
+import pageReset from "./modules/pageReset.js";
+import { buildUserStrings } from "./modules/buildUserStrings.js";
+import { chordsFound } from "./modules/checkIndices.js";
+import enharmonics from "./modules/enharmonics.js";
+import loadLocalTuning from "./modules/loadLocalTuning.js";
+import { SHARPS, FLATS } from "./data/constants.js";
+import getUserNotes from "./modules/getUserNotes.js";
+import noMatchError from "./modules/noMatchError.js";
+import notEnoughNotesError from "./modules/notEnoughNotesError.js";
+import outputToDom from "./modules/outputToDom.js";
 
-// All number input fields
-const fretInputs = document.querySelectorAll('.note');
-// Submit button
-const userChord = document.getElementById('user-chord');
-// THE FORM
-const notesForm = document.getElementById('notes-form');
+/** @type {HTMLElement} */
+const notesFormElement = document.getElementById("notes-form");
+/** @type {HTMLElement} */
+const notesFormSubmitBtn = notesFormElement.querySelector("#form-submit");
+/** @type {HTMLElement} */
+const pageResetBtn = notesFormElement.querySelector("#page-reset");
+/** @type {HTMLElement} */
+const sharpRadioBtn = document.querySelector("#sharp-key");
+/** @type {HTMLElement} */
+const flatRadioBtn = document.querySelector("#flat-key");
+/** @type {HTMLElement} */
+const altTuningsFormElement = document.getElementById("tunings-form");
 
-// The chromatic scale by string, 15 frets (Sharps only)
-const stringLoE = ["E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯","E", "F", "F♯", "G"];
-const stringA = ["A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C"];
-const stringD = ["D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F"];
-const stringG = ["G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯"];
-const stringB = ["B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D"];
-const stringHiE = ["E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G"];
+/** @type {string[]} */
+const userChordNotes = [];
 
-// The chromatic scale using sharps then flats (just using sharps right now)
-const chromaticSharps = ["A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G"];
-const chromaticFlats = ["A", "B♭", "B", "C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B", "C", "D♭", "D", "E♭", "E", "F", "G♭", "G"];
+// MAIN FUNCTION - Get objects from chord-intervals.js, output results
+function getChordName() {
 
-let userFrets = [];
-let chordTones = [];
+  // 1. Build six 17-note strings based on the users' tuning
+  buildUserStrings();
 
-notesForm.addEventListener("submit", function(e) {
-  getNotes();
-  // getJson();
-  // clearNotes();
-
-
-  e.preventDefault();
-});
-
-/* 
-getNotes: 
-1. Get the fret #'s entered by the user (DONE)
-2. Convert the fret #'s into chromatic notes (DONE)
-3. In case of duplicate notes, get only unique notes (DONE)
-4. Create a 12-note array for each chord tone (DONE)
-5. Determine intervals/steps for each note compared to the other notes (DONE)
-
-chordCalcs (doing all this in getNotes):
-6. Find JSON 'steps' array(s) that match #5 (need JSON files here)
-7. Output Chord name for matching data.steps
-8. Output the chord notes and chord intervals in "proper" order
-9. Output name(s) of "equal" chords, & Chord Substitutes (later) 
-10. Output scale(s) & scale degrees that build the chord
-11. Clear everything on next Submit (keyddown?) 
-*/
-
-function getNotes() {
-  // 1. Get the fret #'s...
-  let userFrets = [firstNote.value, secondNote.value, thirdNote.value, fourthNote.value, fifthNote.value, sixthNote.value];
-
-  // Is the conditional here correct?
-  if ([...userFrets]) {
-    
-    // 2. ...convert fret #'s into chromatic notes. This will have to move down the list because I need to get the chord name 1st in the event there are #'s or b's
-    chordTones.push(stringLoE[userFrets[0]], stringA[userFrets[1]], stringD[userFrets[2]], stringG[userFrets[3]], stringB[userFrets[4]], stringHiE[userFrets[5]]);
-  }
+  // 2. Get user fret #'s and convert fret #'s into note values
+  getUserNotes(userChordNotes);
   
-  // 3. In case of duplicate notes, get only unique notes
-  let uniqueNotes = [];
-  for (let i = 0; i < chordTones.length; i++) {
+  // 3. Remove duplicate user note
+  /** @type {string[]} */
+  let uniqueUserNotes = [];
+  uniqueUserNotes = userChordNotes.filter(tone => (!uniqueUserNotes.includes(tone) && tone !== undefined ? uniqueUserNotes.push(tone) : null));
 
-    if (!uniqueNotes.includes(chordTones[i]) && chordTones[i] !== undefined) {
-      uniqueNotes.push(chordTones[i]);
+  let uniqueUserNotesAsRoot = [];
+  let uniqueNoteIntervals = [];
+
+  for (let i = 0; i < uniqueUserNotes.length; i++) {
+
+    /**
+     * Push onto uniqueUserNotesAsRoot[] a 12-note string  
+     * array for each unique user note. 
+     * 
+     * The arrays with each chord note as the root are used 
+     * to determine the intervals.
+     */
+    if (sharpRadioBtn.checked) {
+      /** @type {number} */
+      const position = SHARPS.indexOf(uniqueUserNotes[i]);
+
+      uniqueUserNotesAsRoot = SHARPS.slice(position, position + 12);
+    } else if (flatRadioBtn.checked) {
+      /** @type {number} */
+      const position = FLATS.indexOf(uniqueUserNotes[i]);
+
+      uniqueUserNotesAsRoot = FLATS.slice(position, position + 12);
     }
-  }
+
+    /**
+     * Convert unique user notes to intervals.
+     * 
+     * Using uniqueUserNotesAsRoot, push the intervals for each 
+     * unique note onto uniqueNoteIntervals[].
+     */
+    uniqueNoteIntervals = []; 
+    uniqueUserNotes.forEach(note => uniqueNoteIntervals.push(uniqueUserNotesAsRoot.indexOf(note)));
     
-  let noteSteps = [];
-  for (let i = 0; i < uniqueNotes.length; i++) {
+    /**
+     * @description - Create an object: key = note interval, value = note
+     * The object 'obj' is in the proper format to find a matching chord
+     * in chord-intervals.js based on the intervals.
+     * 
+     * @type {object}
+     */
+    let obj = {};
+    uniqueNoteIntervals.forEach((key, i) => {
+      obj[key] = uniqueUserNotes[i];
+    });
+    // console.log(obj);
 
-    // 4. Create a 12-note array for each chord tone
-    let position = chromaticSharps.indexOf(uniqueNotes[i]);
-    let noteAsRoot = chromaticSharps.slice(position, position + 12);
+    // 7. Join user notes as entered:
+    /** @type {string[]} */
+    const userNotes = uniqueUserNotes.join("-");
 
-    // 5. Determine intervals for each note compared to the other notes
-    noteSteps = [];
-    uniqueNotes.forEach(note => noteSteps.push(noteAsRoot.indexOf(note)));
+    // 8. Handle edge cases/exceptions: enharmonic equivalents
+    enharmonics(obj, uniqueUserNotesAsRoot, uniqueNoteIntervals);
 
-    noteStepsSort = noteSteps.sort();
-    console.log(uniqueNotes[i]);
-    console.log(noteStepsSort);
- 
-    // 6. Find JSON steps array(s) that matches #5
+    /**
+     * Check for a matching chord in chord-intervals.js using
+     * chordsFound from checkIndices.js then perform all other checks
+     * and setup before outputting results to the DOM
+     */
+    if (chordsFound.length > 0) {
 
-    let noteIntervals = {};
-    // let noteIntervals = [];
-    
-    // How do I turn noteInterval into an array - this sets each unique note as a key and the step as its value. I don't think I need this
-    uniqueNotes.forEach((n, s) => {noteIntervals[n] = noteSteps[s]})
-    console.log(noteIntervals);
+      // Put the chord notes in "proper" order
+      /** @type {string[]} */
+      const chordNotesArray = [];
+      /** @type {string} */
+      let chordNotes = "";
+      
+      chordsFound[0].steps.map(note => {
+        chordNotesArray.push(obj[note]);
+      });
+      chordNotes = chordNotesArray.join("-");
 
-    function getJson() {
-    fetch('./js/chord-intervals.json')
-      .then(res => res.json())
-      .then(data =>  {
-        let output = '';
+      // Create slash chords for "short" names if applicable
+      /** @type {string} */
+      let slashChordName = '';
 
-        function compareArrays(arr1, arr2) {
-          if (arr1.length !== arr2.length) return false
+      if (uniqueNoteIntervals[0] !== 0 && chordsFound[0].Chord.length < 7) {
+        slashChordName = uniqueUserNotes[i] + chordsFound[0].Chord + "/" + obj[uniqueNoteIntervals[0]];
+      } else {
+        slashChordName = uniqueUserNotes[i] + chordsFound[0].Chord;
+      }
 
-          for (let index in arr1) {
-            if (arr1[index] !== arr2[index]) return false
-          }
-          return true
-        }
+      // 12. Basic chord name if a slash chord for the scale degrees card
+      /** @type {string} */
+      const chordName = uniqueUserNotes[i] + chordsFound[0].Chord;
 
-        // const arrOfObjects = data (I don't need this variable since I have data)
-        const arrWeLookFor = noteStepsSort;
-
-        const result = data.find(({steps})=>{
-          // return compareArrays(arr, arrWeLookFor) (arr should be data, right?)
-          return compareArrays(data, noteStepsSort)
-        })
-        console.log(result) 
-
-        // May not need this now
-        data.forEach(function(chord) {
-
-          output += `<li>${Object.keys(chord)[0]}: ${chord.Chord} | Chord steps: ${chord.steps} | ${chord["Equal Chords"][0].name} | ${chord.scales["Major Scale"]}</li>`;
-
-          // console.log(chord);
-          return chord;
+      // 13. Get "equal" chords if chord(s) found have that property
+      /** @type {string[]} */
+      let equalChordName = [];
+      if (chordsFound[0].hasOwnProperty("Equal Chords")) {
+        chordsFound[0]["Equal Chords"].map(equal => {
+          equalChordName.push(uniqueUserNotesAsRoot[equal["key"]] + equal.name);
         });
-        document.getElementById('output').innerHTML = output;
-      })
-      .catch(err => console.log(err));
+      } else {
+        equalChordName.push(["Unique"]);
+      }
+      /** @type {string} */
+      const equalChords = equalChordName.join(", ");
+
+      // Get scale degrees for the chord
+      /** @type {string[]} */
+      let chordScaleDegrees = [];
+      chordsFound[0]["scales"].map(degree => {
+        chordScaleDegrees.push(`<li>${Object.keys(degree)}: ${Object.values(degree)}</li>`);
+      });
+
+      // Get chord tendency and chord intervals
+      /** @type {string} */
+      const chordIntervals = chordsFound[0].Intervals.join("-");
+      /** @type {string} */
+      const chordTendency = chordsFound[0].Tendency.join(", ").split(" ").join(" ");
+      
+      // Write ALL of the above to the DOM
+      /** @type {string[]} */
+      const elementValues = [slashChordName, userNotes, chordNotes, chordName, chordIntervals, chordTendency, equalChords]
+      outputToDom(elementValues);
+
+      // 17. Scale degrees card.
+      document.getElementById("scale-degrees").innerHTML = chordScaleDegrees.join("");
+      
+      break;
+
+    } else {
+      // Error msg for less than 3 unique notes
+      if (uniqueUserNotes.length < 3) {
+        /** @type {string} */
+        const userNotes = uniqueUserNotes.join("-");
+        notEnoughNotesError(userNotes);
+      }
     }
-    getJson();
-
-    // 6b. 
-
-    // 7. Output Chord name for matching data.steps
-    let noteOutput = document.getElementById('note-output').innerHTML += `<span class="notes">${uniqueNotes[i]}</span>`;
-
-    // 8. Output the chord notes and chord intervals in "proper" order
-    let intervalOutput = document.getElementById('interval-output').innerHTML += `<span class="intervals">${uniqueNotes[i]}: ${noteSteps} | </span>`;
-
-    // 9. Output name(s) of "equal" chords
-
-    // 10. Output scale(s) & scale degrees that build the chord
-
-    // 11. Clear the page on next Submit
-
   }
-  // console.log(uniqueNotes);
+
+  // Error msg if no matching chord in chord-intervals.js
+  if (uniqueNoteIntervals.length >= 3 && chordsFound.length === 0) {
+    noMatchError(uniqueUserNotes);
+  }
 }
 
+/* EVENT LISTENERS */
+/**
+ * @description - TUNING: Check local storage and load tuning values
+ * 
+ * @param {EventType}
+ * @param {Function}
+ * @type {AddEventListener}
+ */
+document.addEventListener('DOMContentLoaded', loadLocalTuning);
 
-// function clearNotes() {
-//   notesForm.addEventListener('click', function() {
-//     let noteOutput = document.getElementById('note-output').innerHTML = '';
-//   })
-// }
+/**
+ * @description - TUNING: Set innerText above number inputs for users' tuning
+ * 
+ * @param {EventType}
+ * @param {Function}
+ * @type {AddEventListener}
+ */
+altTuningsFormElement.addEventListener("submit", setTuning);
+
+/**
+ * @description - MAIN FORM: Notes form
+ * 
+ * @param {EventType}
+ * @param {Function}
+ * @type {AddEventListener}
+ */
+notesFormElement.addEventListener("submit", function (e) {
+  e.preventDefault();
+  getChordName();
+
+  document.querySelector('#notes-heading').scrollIntoView({
+    behavior: 'smooth'
+  });
+});
+
+/**
+ * @description - SUBMIT BUTTON: Submit button to scroll to results
+ * 
+ * @param {EventType}
+ * @param {Function}
+ * @type {AddEventListener}
+ */
+notesFormSubmitBtn.addEventListener('click', function () {
+  pageResetBtn.scrollIntoView({
+    behavior: 'smooth'
+  });
+})
+
+// 5. 
+/**
+ * @description - RESET BUTTON
+ * 
+ * @param {EventType}
+ * @param {Function}
+ * @type {AddEventListener}
+ */
+pageResetBtn.addEventListener("click", pageReset);
+
+/*
+ *    DONE:
+ * ✅ Add tuning to localStorage
+ * ✅ Add sharp/flat key to localStorage
+ * ✅ Set tuning and sharp/flat key from localStorage
+ * 
+ *    TO-DO:
+ * 📌 1. chordsFound (either 0 or 1) should be singular: chordFound
+ * 📌 2. Finish updating chord-intervals.json
+ * 📌 3. pageReset.js -> .reload() is wrong - REDO 
+ *       (having a major problem with this)
+ */
